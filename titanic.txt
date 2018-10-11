@@ -1,0 +1,95 @@
+from sklearn.svm import SVC
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.ensemble import RandomForestClassifier
+import numpy as np # linear algebra
+import pandas as pd # data processing, CSV file I/O (e.g. pd.read_csv)
+import matplotlib.pyplot as plt
+from sklearn.model_selection import cross_val_score
+from sklearn.ensemble import VotingClassifier
+from sklearn.neural_network import MLPClassifier
+import xgboost
+
+
+y_col = []
+
+# Load Data
+train_df = pd.read_csv('data/train.csv', index_col=0)
+test_df = pd.read_csv('data/test.csv', index_col=0)
+
+
+y_train = train_df.pop('Survived')
+
+# Combine Both datasets
+all_df = pd.concat((train_df, test_df), axis=0)
+
+# Fix class of Pclass
+all_df['Pclass'] = all_df['Pclass'].astype(str)
+
+# Modify Features
+sib_dict = {None: 0, "8": 0, "5": 0, "4": .2, "3": .33, "2": .87, "1": 1.15, "0": .53}
+all_df["SibSp"] = all_df["SibSp"].map(sib_dict).astype(int)
+
+# Modify Embarked
+embarked_dict = {None: 0, "C": 1.24, "Q": .64, "S": .51}
+all_df["Embarked"] = all_df["Embarked"].map(embarked_dict).astype(int)
+
+# Modify Cabin
+
+# Fix Categorical Fields
+all_dummy_df = pd.get_dummies(all_df)
+
+#print all_dummy_df.select_dtypes(include=['float64'])
+
+
+
+mean_cols = all_dummy_df.mean()
+#print mean_cols.head(10)
+
+all_dummy_df = all_dummy_df.fillna(mean_cols)
+#print all_dummy_df.isnull().sum().sort_values(ascending=False).head(10)
+#print all_dummy_df.isnull().sum().sum()
+
+# Seperate back out
+dummy_train_df = all_dummy_df.loc[train_df.index]
+dummy_test_df = all_dummy_df.loc[test_df.index]
+
+X_train = dummy_train_df.values
+X_test = dummy_test_df.values
+
+# RandomForest n_estimators=100 .74
+# KNN n=5 .595
+# SVC C=30 gamma= .001
+clf = MLPClassifier(max_iter=10000)
+svc = SVC(C=30, gamma=.001, probability=True)
+knn = KNeighborsClassifier(n_neighbors=5)
+rf = RandomForestClassifier(n_estimators=100)
+xgb = xgboost.XGBClassifier(n_estimators=200)
+#svc.fit(X_train, y_train)
+#y_final = svc.predict(X_test)
+
+vclf = VotingClassifier(estimators=[('svc', svc), ('knn', knn), ('rf', rf), ('xgb', xgb)], voting='soft', weights=[1, 1, 1, 2])
+
+
+test_score = (cross_val_score(vclf, X_train, y_train, cv=5, scoring='f1'))
+print np.mean(test_score)
+
+#y_final = vclf.predict(X_test)
+#submission_df = pd.DataFrame(data= {'PassengerId' : test_df.index, 'Survived': y_final})
+
+#submission_df.to_csv('data/voting_with_feats_submission.csv', index=False)
+
+'''
+k = [3, 4, 5, 6, 7, 8, 9, 10]
+g = (1, 2, 3, 4)
+test_scores = []
+
+
+for i in k:
+    clf = xgboost.XGBClassifier(n_estimators=200, max_depth=i)
+    test_score = (cross_val_score(clf, X_train, y_train, cv=5, scoring='f1'))
+    test_scores.append(np.mean(test_score))
+
+plt.plot(k, test_scores)
+plt.title("K Value vs CV Error")
+plt.show()
+'''
